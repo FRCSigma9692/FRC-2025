@@ -1,0 +1,110 @@
+package frc.robot.subsystems;
+import static edu.wpi.first.units.Units.*;
+
+import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
+import com.ctre.phoenix6.swerve.SwerveRequest;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.LimelightHelpers;
+import frc.robot.commands.LimelightCmd2;
+import frc.robot.generated.TunerConstants;
+
+public class LimelightSubOriginalCode extends SubsystemBase {
+
+  double kP = 0.05;
+  double tXleft;
+  double rYleft;
+  double tXright;
+  double output,out1;
+  boolean tV;
+  double x,y,rot,head;
+  double lastHeadError = 0, lastStrafeError = 0, lastDistError = 0; 
+
+  LimelightCmd2 l;
+
+  private double MaxSpeed = TunerConstants.kSpeedAt12Volts.in(MetersPerSecond); // kSpeed At12VoltsMps desired top speed
+  private double MaxAngularRate = RotationsPerSecond.of(0.75).in(RadiansPerSecond);
+  CommandSwerveDrivetrain drivetrain; 
+  private final SwerveRequest.RobotCentric drive = new SwerveRequest.RobotCentric()
+            .withDeadband(MaxSpeed * 0).withRotationalDeadband(MaxAngularRate * 0) // Add a 10% deadband
+            .withDriveRequestType(DriveRequestType.OpenLoopVoltage);
+  
+  public LimelightSubOriginalCode(CommandSwerveDrivetrain drivetrain) {
+  this.drivetrain = drivetrain;
+
+  }
+  
+  public double getDistance(){
+    double ty = LimelightHelpers.getTY("limelight-l");
+
+    // how many degrees back is your limelight rotated from perfectly vertical?
+    double limelightMountAngleDegrees = 0; 
+
+    // distance from the center of the Limelight lens to the floor
+    double limelightLensHeightInches = 17.75; 
+
+    // distance from the target to the floor
+    double goalHeightInches = 12; 
+
+    double angleToGoalDegrees = limelightMountAngleDegrees + ty;
+    double angleToGoalRadians = angleToGoalDegrees * (3.14159 / 180.0);
+
+    double distance = (goalHeightInches - limelightLensHeightInches) / Math.tan(angleToGoalRadians);
+    return distance;
+    }
+  
+    public double cord(){
+      if(tXleft <= 1.5 && tXleft >= -1.5 ){
+        return 0.0;
+      }
+      double StrafeOut =  -((tXleft-0.5) * 0.055)-(0.038*(((tXleft-0.5) -lastStrafeError)/0.02));
+      lastStrafeError = (tXleft-0.5);
+      return StrafeOut;
+    }
+
+    public boolean Autoalignment(){
+      tXleft =  LimelightHelpers.getTX("limelight-l");
+      tV = LimelightHelpers.getTV("limelight-l");
+      head = Math.toDegrees(LimelightHelpers.getTargetPose3d_CameraSpace("limelight-l").getRotation().getY());
+      
+      SmartDashboard.putNumber("Output Turning ", cord());
+      SmartDashboard.putNumber("RoctationAngleeeeeeeeeee", head);
+      SmartDashboard.putNumber("Distance", getDistance()-16);
+
+      SmartDashboard.putString("Ends", "no");
+      //PIDController pidHeading = new PIDController(0.08, 0, 0);
+        if(head >= 1.5 || head <= -1.5){
+          output = -(0.02 * head) -(0.015*((head -lastHeadError)/0.02));
+         // output = -pidHeading.calculate(head,0);
+          lastHeadError= head;
+          output = Math.max(-1, Math.min(1, output));
+          
+        }
+        rot = cord();
+
+        if(getDistance() <= 14 || getDistance() >= 18)
+        {
+          y = ((getDistance() - 16) * 0.045)+ 0.025*(((getDistance() - 16) - lastDistError)/0.02);
+          lastDistError = (getDistance() - 16);
+          // if(Math.abs(head)>40){
+          //   y = 0;
+          // }
+        }
+
+        if(rot <= 0.3 && rot >= -0.3 &&
+            getDistance()-16 <= 1.5 && getDistance()-16 > -1.5 &&
+            head <= 1 && head >= -1){
+              drivetrain.setControl(drive.withVelocityX(0)
+              .withVelocityY(0)
+              .withRotationalRate(0));
+              SmartDashboard.putString("Ends", "Yes");
+              return false;
+        }
+
+     drivetrain.setControl(drive.withVelocityX(y * MaxSpeed * 0.5)
+     .withVelocityY(rot * MaxSpeed * 0.5)
+     .withRotationalRate(output * MaxAngularRate * 0.5));
+      return true;
+    }
+
+  }
